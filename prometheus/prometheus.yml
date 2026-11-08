@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    cluster: mikrotik-monitoring
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # The target is a ZeroTier address, never a public/WAN address.
+  - job_name: mikrotik-snmp
+    metrics_path: /snmp
+    params:
+      module: [mikrotik]
+    static_configs:
+      - targets: ["10.147.20.1"]
+        labels:
+          site: primary
+          transport: zerotier
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: snmp-exporter:9116

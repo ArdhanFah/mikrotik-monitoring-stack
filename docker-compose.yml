@@ -1,0 +1,84 @@
+name: mikrotik-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.listen-address=0.0.0.0:9090
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      snmp-exporter:
+        condition: service_started
+    networks: [monitoring]
+
+  snmp-exporter:
+    image: prom/snmp-exporter:v0.26.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/snmp_exporter/snmp.yml"]
+    ports:
+      - "127.0.0.1:9116:9116"
+    volumes:
+      - ./exporters/snmp/snmp.yml:/etc/snmp_exporter/snmp.yml:ro
+    networks: [monitoring]
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    restart: unless-stopped
+    environment:
+      GF_SERVER_ROOT_URL: https://${GRAFANA_DOMAIN}/
+      GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_INSTALL_PLUGINS: ""
+    expose: ["3000"]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus]
+    networks: [monitoring]
+
+  nginx:
+    build: ./nginx
+    restart: unless-stopped
+    environment:
+      GRAFANA_DOMAIN: ${GRAFANA_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on: [grafana]
+    networks: [monitoring]
+
+  # Optional alternative to SNMP. Start with: docker compose --profile mktxp up -d
+  mktxp:
+    image: ghcr.io/akpw/mktxp:latest
+    profiles: [mktxp]
+    restart: unless-stopped
+    command: ["mktxp", "export"]
+    ports:
+      - "127.0.0.1:49090:49090"
+    volumes:
+      - ./exporters/mktxp/mktxp.conf:/root/mktxp/mktxp.conf:ro
+    networks: [monitoring]
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:

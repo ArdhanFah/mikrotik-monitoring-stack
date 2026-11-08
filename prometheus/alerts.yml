@@ -1,0 +1,29 @@
+groups:
+  - name: mikrotik-health
+    rules:
+      - alert: MikrotikExporterDown
+        expr: up{job="mikrotik-snmp"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MikroTik SNMP target is unavailable"
+          description: "No metrics have been received from {{ $labels.instance }} for 5 minutes."
+
+      - alert: MikrotikHighCpu
+        expr: mikrotik_cpu_load_ratio > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MikroTik CPU load is high"
+          description: "CPU load on {{ $labels.instance }} is above 80%."
+
+      - alert: MikrotikLowFreeMemory
+        expr: mikrotik_memory_free_bytes / mikrotik_memory_total_bytes < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MikroTik free memory is low"
+          description: "Free memory on {{ $labels.instance }} is below 15%."
